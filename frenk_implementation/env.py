@@ -264,39 +264,41 @@ class PassiveHapticsEnv(object, radius=0.5, random=False):
         d2 = s1 * (y2 - y1) - t1 * (x2 - x1)
         m = d1 / d
         n = d2 / d
-    
+
         if s1 * s2 + t1 * t2 > 0 and m > 0 and n < 0:  # situation a or b
             currentOrthoDir = np.array([-np.sin(self.p_direction, np.cos(self.p_direction))])
             if np.dot(targetDir, currentOrthoDir) < 0:
                 currentOrthoDir = - currentOrthoDir
-            targetOrthoDir  = np.array([-np.sin(self.target_dir), np.cos(self.target_dir)])
+            targetOrthoDir = np.array([-np.sin(self.target_dir), np.cos(self.target_dir)])
             if np.dot(targetOrthoDir, currentDir) < 0:
                 targetOrthoDir = - targetOrthoDir
             u1 = currentOrthoDir[0]
-            v1 = currentOrthoDir[1] # (u1,v1)为(s1,t1)法向量
+            v1 = currentOrthoDir[1]  # (u1,v1)为(s1,t1)法向量
             u2 = targetOrthoDir[0]
-            v2 = targetOrthoDir[1] # (u2,v2)为(s2,t2)法向量
-            
+            v2 = targetOrthoDir[1]  # (u2,v2)为(s2,t2)法向量
+
             # r = abs(((x2 - x1) * u2 + (y2 - y1) * v2) / (1 + u1 * u2 + v1 * v2)) # radius of the tangent circle
-            r = ((x2 - x1) * u2 + (y2 - y1) * v2) / (1 + u1 * u2 + v1 * v2) # 求出半径
+            r = ((x2 - x1) * u2 + (y2 - y1) * v2) / (1 + u1 * u2 + v1 * v2)  # 求出半径
             tangentPos = currentPos + (currentOrthoDir * r + r * targetOrthoDir)  # 为a中大圆弧切点的位置
             # if  (targetPos - tangentPos).x / targetDir.x > 0:      # a情况
-            if (targetPos - tangentPos)[0] / targetDir[0] > 0:
-                middlePos = tangentPos 
-            else: # b: (x1, y1) + p(s1, t1) + r(u1, v1) + r(u2, v2) = (x2, y2)
-                d = s1 * (v1 + v2) - t1 * (u1 + u2) #  利用cramer法则，算行列式
+            if (x2 - tangentPos[0]) / targetDir[0] > 0:
+                middlePos = tangentPos
+            else:  # b: (x1, y1) + p(s1, t1) + r(u1, v1) + r(u2, v2) = (x2, y2)
+                d = s1 * (v1 + v2) - t1 * (u1 + u2)  # 利用cramer法则，算行列式
                 d1 = (x2 - x1) * (v1 + v2) - (y2 - y1) * (u1 + u2)
                 d2 = s1 * (y2 - y1) - t1 * (x2 - x1)
                 p = d1 / d
                 r = d2 / d
                 middlePos = currentPos + p * currentDir
-            
-        elif m < 0 and  n < 0: # situation c
-                
-                // 要解非线性方程组才能算出r1, r2，这也太难了！！
-                // 两条圆弧的两个半径非常难求解，我想不出办法了
-                
-        else: # d情况
+
+        elif m < 0 and n < 0:  # situation c
+            '''
+            要解非线性方程组才能算出r1, r2，这也太难了！！
+            # 两条圆弧的两个半径非常难求解，我想不出办法了
+            '''
+
+
+        else:  # d情况
             # pathType = PathType.d
             targetOrthoDir = np.array([-np.sin(self.target_dir), np.cos(self.target_dir)])
             if np.dot(targetOrthoDir, currentDir) > 0:
@@ -311,100 +313,80 @@ class PassiveHapticsEnv(object, radius=0.5, random=False):
             v2 = targetOrthoDir[1]
 
             # (x1, y1) + p(s1, t1) + r(u1, v1) + r(u2, v2) = (x2, y2)
-            可解出p, r
-            float d = s1 * (v1 + v2) - t1 * (u1 + u2); // 利用cramer法则，算行列式
-            float d1 = (x2 - x1) * (v1 + v2) - (y2 - y1) * (u1 + u2);
-            float d2 = s1 * (y2 - y1) - t1 * (x2 - x1);
-            float
-            p = d1 / d;
-            r = d2 / d;
-            middlePos = currentPos + p * currentDir;
-                
-                # 不考虑e情况，因为可以把e情况当a情况考虑，虽然可能会有圆弧的曲率过大，但是这篇论文算法本身就不能保证所有路径曲率在max范围内
+            d = s1 * (v1 + v2) - t1 * (u1 + u2)  # 利用cramer法则，算行列式
+            d1 = (x2 - x1) * (v1 + v2) - (y2 - y1) * (u1 + u2)
+            d2 = s1 * (y2 - y1) - t1 * (x2 - x1)
+            p = d1 / d
+            r = d2 / d
+            middlePos = currentPos + p * currentDir
+        # 不考虑e情况，因为可以把e情况当a情况考虑，虽然可能会有圆弧的曲率过大，但是这篇论文算法本身就不能保证所有路径曲率在max范围内
 
+    def ApplyRedirection(self):
+         if (isRedirecting == false || Utilities.Approximately(redirectionManager.currPosReal,targetPos))
+            findTarget();
+        if (isRedirecting == true)
+        {
+           if (Utilities.Approximately(Utilities.FlattenedPos2D(redirectionManager.currPosReal) , middlePos))
+            {
+                passMiddlePoint = true;
+            }
+            // Get Required Data
+            Vector3 deltaPos = redirectionManager.deltaPos;
+            float deltaDir = redirectionManager.deltaDir;
+            switch (pathType)//判断路径类型
+            {
+                case PathType.a:
+                {
+                        if (!passMiddlePoint)
+                        {
+                            if (deltaPos.magnitude / redirectionManager.GetDeltaTime() > MOVEMENT_THRESHOLD) //User is moving
+                            {
+                                //走过的角度
+                                rotationFromCurvatureGain = Mathf.Rad2Deg * (deltaPos.magnitude / r);
+                            }
+                        }
+                        break;
+                }
+                case PathType.b:
+                {
+                    if (passMiddlePoint)
+                        {
+                            if (deltaPos.magnitude / redirectionManager.GetDeltaTime() > MOVEMENT_THRESHOLD) //User is moving
+                            {
+                                //走过的角度
+                                rotationFromCurvatureGain = Mathf.Rad2Deg * (deltaPos.magnitude / r);
+                            }
+                        }
+                    break;
+                }
+                case PathType.c:
+                {
+                    /////c情况如上所说，两条圆弧半径非常难算，待解决此问题
+                    ///
+                    break;
+                }
+                case PathType.d:
+                {
+                    if (passMiddlePoint)
+                    {
+                        if (deltaPos.magnitude / redirectionManager.GetDeltaTime() > MOVEMENT_THRESHOLD) //User is moving
+                        {
+                            //走过的角度
+                            rotationFromCurvatureGain = Mathf.Rad2Deg * (deltaPos.magnitude / r);
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        InjectCurvature(rotationFromCurvatureGain);
     }
-    public
-    override
-    void
-    ApplyRedirection()
-    {
-    if (isRedirecting == false | | Utilities.Approximately(redirectionManager.currPosReal, targetPos))
-    findTarget();
-    if (isRedirecting == true)
-    {
-    if (Utilities.Approximately(Utilities.FlattenedPos2D(redirectionManager.currPosReal), middlePos))
-
-
-{
-    passMiddlePoint = true;
 }
-// Get
-Required
-Data
-Vector3
-deltaPos = redirectionManager.deltaPos;
-float
-deltaDir = redirectionManager.deltaDir;
-switch(pathType) // 判断路径类型
-{
-    case
-PathType.a:
-{
-if (!passMiddlePoint)
-{
-if (deltaPos.magnitude / redirectionManager.GetDeltaTime() > MOVEMENT_THRESHOLD) // User is moving
-{
-// 走过的角度
-rotationFromCurvatureGain = Mathf.Rad2Deg * (deltaPos.magnitude / r);
-}
-}
-break;
-}
-case
-PathType.b:
-{
-if (passMiddlePoint)
-    {
-    if (deltaPos.magnitude / redirectionManager.GetDeltaTime() > MOVEMENT_THRESHOLD) // User is moving
-    {
-    // 走过的角度
-    rotationFromCurvatureGain = Mathf.Rad2Deg * (deltaPos.magnitude / r);
-    }
-    }
-    break;
-}
-case
-PathType.c:
-{
-// // / c情况如上所说，两条圆弧半径非常难算，待解决此问题
-// /
-break;
-
-}
-case
-PathType.d:
-{
-if (passMiddlePoint)
-    {
-    if (deltaPos.magnitude / redirectionManager.GetDeltaTime() > MOVEMENT_THRESHOLD) // User is moving
-    {
-    // 走过的角度
-    rotationFromCurvatureGain = Mathf.Rad2Deg * (deltaPos.magnitude / r);
-    }
-    }
-    break;
-    }
-    }
-    }
-    InjectCurvature(rotationFromCurvatureGain);
-    }
-    }
 
 
     '''
     scale the angle into 0-pi
     '''
-
 
     def delta_angle_norm(x):
         if x >= PI:
@@ -412,7 +394,6 @@ if (passMiddlePoint)
         elif x <= -PI:
             x = x + 2 * PI
         return x
-
 
     class Steinickef_Redirector(object):
         # User Experience Improvement Parameters
