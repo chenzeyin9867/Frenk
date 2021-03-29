@@ -246,6 +246,24 @@ class PassiveHapticsEnv(object, radius=0.5, random=False):
         else:
             return False
 
+    """
+    compute the length of current virtual path in order to compute the in-time translation gain
+    """
+    def getLengthOfVirtualPath(self, pathType, currentPos, targetPos, currentDir, targetDir, tangentPos, radius):
+        if pathType == 'a':
+            deltaAngle = abs(delta_angle_norm(targetDir - currentDir))
+            circleLength = radius * deltaAngle
+            lineSegmentLength = distance(tangentPos[0], tangentPos[1], targetPos[0], targetPos[1])
+            return lineSegmentLength + circleLength
+        elif pathType == 'b' or pathType == 'd':
+            deltaAngle = abs(delta_angle_norm(targetDir - currentDir))
+            circleLength = radius * deltaAngle
+            lineSegmentLength = distance(currentPos[0], currentPos[1], tangentPos[0], tangentPos[1])
+            return lineSegmentLength + circleLength
+        elif pathType == 'c':
+        else: # type d
+
+
     def calculatePath(self):
         currentDir = np.array([np.cos(self.p_direction), np.sin(self.p_direction)])  # physical direction
         targetDir = np.array([np.cos(self.target_dir), np.sin(self.target_dir)])
