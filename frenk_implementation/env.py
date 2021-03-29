@@ -247,8 +247,9 @@ class PassiveHapticsEnv(object, radius=0.5, random=False):
             return False
 
     def calculatePath(self):
-        cur_direction = np.array([np.cos(self.p_direction), np.sin(self.p_direction)])  # physical direction
-        current_pos = np.array([self.x_physical, self.y_physical])
+        currentDir = np.array([np.cos(self.p_direction), np.sin(self.p_direction)])  # physical direction
+        targetDir = np.array([np.cos(self.target_dir), np.sin(self.target_dir)])
+        currentPos = np.array([self.x_physical, self.y_physical])
         x1 = self.x_physical
         y1 = self.y_physical
         x2 = self.target_x
@@ -263,79 +264,63 @@ class PassiveHapticsEnv(object, radius=0.5, random=False):
         d2 = s1 * (y2 - y1) - t1 * (x2 - x1)
         m = d1 / d
         n = d2 / d
-
+    
         if s1 * s2 + t1 * t2 > 0 and m > 0 and n < 0:  # situation a or b
-            u1 = -np.sin(self.p_direction)
-            v1 =  np.cos(self.p_direction)
-            u2 = -np.sin(self.target_dir)
-            v2 =  np.cos(self.target_dir)
-            r = abs(((x2 - x1) * u2 + (y2 - y1) * v2) / (1 + u1 * u2 + v1 * v2)) # radius of the tangent circle
+            currentOrthoDir = np.array([-np.sin(self.p_direction, np.cos(self.p_direction))])
+            if np.dot(targetDir, currentOrthoDir) < 0:
+                currentOrthoDir = - currentOrthoDir
+            targetOrthoDir  = np.array([-np.sin(self.target_dir), np.cos(self.target_dir)])
+            if np.dot(targetOrthoDir, currentDir) < 0:
+                targetOrthoDir = - targetOrthoDir
+            u1 = currentOrthoDir[0]
+            v1 = currentOrthoDir[1] # (u1,v1)为(s1,t1)法向量
+            u2 = targetOrthoDir[0]
+            v2 = targetOrthoDir[1] # (u2,v2)为(s2,t2)法向量
+            
+            # r = abs(((x2 - x1) * u2 + (y2 - y1) * v2) / (1 + u1 * u2 + v1 * v2)) # radius of the tangent circle
+            r = ((x2 - x1) * u2 + (y2 - y1) * v2) / (1 + u1 * u2 + v1 * v2) # 求出半径
+            tangentPos = currentPos + (currentOrthoDir * r + r * targetOrthoDir)  # 为a中大圆弧切点的位置
+            # if  (targetPos - tangentPos).x / targetDir.x > 0:      # a情况
+            if (targetPos - tangentPos)[0] / targetDir[0] > 0:
+                middlePos = tangentPos 
+            else: # b: (x1, y1) + p(s1, t1) + r(u1, v1) + r(u2, v2) = (x2, y2)
+                d = s1 * (v1 + v2) - t1 * (u1 + u2) #  利用cramer法则，算行列式
+                d1 = (x2 - x1) * (v1 + v2) - (y2 - y1) * (u1 + u2)
+                d2 = s1 * (y2 - y1) - t1 * (x2 - x1)
+                p = d1 / d
+                r = d2 / d
+                middlePos = currentPos + p * currentDir
+            
+        elif m < 0 and  n < 0: # situation c
+                
+                // 要解非线性方程组才能算出r1, r2，这也太难了！！
+                // 两条圆弧的两个半径非常难求解，我想不出办法了
+                
+        else: # d情况
+            # pathType = PathType.d
+            targetOrthoDir = np.array([-np.sin(self.target_dir), np.cos(self.target_dir)])
+            if np.dot(targetOrthoDir, currentDir) > 0:
+                targetOrthoDir = - targetOrthoDir
+            currentOrthoDir = np.array([-np.sin(self.p_direction, np.cos(self.p_direction))])
+            if np.dot(targetDir, currentOrthoDir) > 0:
+                currentOrthoDir = - currentOrthoDir
 
-            #  (x2 - x1 - u1 * r, y2 - y1 - v1 * r)·(u2, v2) = r
-            tangentPos_x = x1 + r * s1 + r *
+            u1 = currentOrthoDir[0]
+            v1 = currentOrthoDir[1]
+            u2 = targetOrthoDir[0]
+            v2 = targetOrthoDir[1]
 
-
-            tangentPos = currentPos + (currentOrthoDir * (float)r) + r * targetOrthoDir; // 为a中大圆弧切点的位置
-            if ((targetPos - tangentPos).x / targetDir.x > 0) // a情况
-            {
-                pathType = PathType.a;
-            middlePos = tangentPos;
-            }
-            else // b情况
-            {
-                pathType = PathType.b;
-            // (x1, y1) + p(s1, t1) + r(u1, v1) + r(u2, v2) = (x2, y2)
+            # (x1, y1) + p(s1, t1) + r(u1, v1) + r(u2, v2) = (x2, y2)
             可解出p, r
-            float
-            d = s1 * (v1 + v2) - t1 * (u1 + u2); // 利用cramer法则，算行列式
-            float
-            d1 = (x2 - x1) * (v1 + v2) - (y2 - y1) * (u1 + u2);
-            float
-            d2 = s1 * (y2 - y1) - t1 * (x2 - x1);
+            float d = s1 * (v1 + v2) - t1 * (u1 + u2); // 利用cramer法则，算行列式
+            float d1 = (x2 - x1) * (v1 + v2) - (y2 - y1) * (u1 + u2);
+            float d2 = s1 * (y2 - y1) - t1 * (x2 - x1);
             float
             p = d1 / d;
             r = d2 / d;
             middlePos = currentPos + p * currentDir;
-            }
-            } else if (m < 0 & & n < 0) // c情况
-                {
-                // 要解非线性方程组才能算出r1, r2，这也太难了！！
-                // 两条圆弧的两个半径非常难求解，我想不出办法了
-                }
-                else // d情况
-                {
-                    pathType = PathType.d;
-                Vector2
-                targetOrthoDir = new
-                Vector2(-targetDir.y, targetDir.x).normalized; // 目标点的法单位向量，方向可能有两个
-                targetOrthoDir = -Mathf.Sign(Vector2.Dot(targetOrthoDir, currentDir)) * targetOrthoDir; // 确定目标点的法向量方向
-                Vector2
-                currentOrthoDir = new
-                Vector2(-currentDir.y, currentDir.x).normalized; // 当前方向的法向量
-                currentOrthoDir = -Mathf.Sign(
-                    Vector2.Dot(currentOrthoDir, targetDir)) * currentOrthoDir; // 法向量有两个，选对的那个
-                float
-                u1 = currentOrthoDir.x, v1 = currentOrthoDir.y; // (u1, v1)
-                为(s1, t1)
-                法向量
-                float
-                u2 = targetOrthoDir.x, v2 = targetOrthoDir.y; // (u2, v2)
-                为(s2, t2)
-                法向量
-                // (x1, y1) + p(s1, t1) + r(u1, v1) + r(u2, v2) = (x2, y2)
-                可解出p, r
-                float
-                d = s1 * (v1 + v2) - t1 * (u1 + u2); // 利用cramer法则，算行列式
-                float
-                d1 = (x2 - x1) * (v1 + v2) - (y2 - y1) * (u1 + u2);
-                float
-                d2 = s1 * (y2 - y1) - t1 * (x2 - x1);
-                float
-                p = d1 / d;
-                r = d2 / d;
-                middlePos = currentPos + p * currentDir;
-                }
-                // 不考虑e情况，因为可以把e情况当a情况考虑，虽然可能会有圆弧的曲率过大，但是这篇论文算法本身就不能保证所有路径曲率在max范围内
+                
+                # 不考虑e情况，因为可以把e情况当a情况考虑，虽然可能会有圆弧的曲率过大，但是这篇论文算法本身就不能保证所有路径曲率在max范围内
 
     }
     public
