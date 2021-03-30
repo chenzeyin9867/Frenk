@@ -80,8 +80,20 @@ public class Steinickef_Redirector : Redirector
             }
         } else if (m<0 && n < 0) //c情况
         {
-            //要解非线性方程组才能算出r1,r2，这也太难了！！
-            //两条圆弧的两个半径非常难求解，我想不出办法了
+            //假设两个圆弧半径相等
+            pathType = PathType.c;
+            Vector2 targetOrthoDir = new Vector2(-targetDir.y, targetDir.x).normalized;//目标点的法向量，方向可能有两个
+            targetOrthoDir = Mathf.Sign(Vector2.Dot(targetOrthoDir, currentDir)) * targetOrthoDir;//确定目标点的法向量方向
+            Vector2 currentOrthoDir = new Vector2(-currentDir.y, currentDir.x).normalized;//当前方向的法向量
+            currentOrthoDir = Mathf.Sign(Vector2.Dot(currentOrthoDir, targetDir)) * currentOrthoDir;//法向量有两个，选对的那个
+            float u1 = currentOrthoDir.x, v1 = currentOrthoDir.y;//(u1,v1)为(s1,t1)法向量
+            float u2 = targetOrthoDir.x, v2 = targetOrthoDir.y;//(u2,v2)为(s2,t2)法向量
+            //|(x2+ru2-x1-ru1,y2+rv2-y1-rv1)|=2r  假设两个圆弧半径相等
+            float a = Mathf.Pow((u2 - u1), 2) + Mathf.Pow(v2 - v1, 2) - 4;
+            float b = 2 * (x2 - x1) * (u2 - u1) + 2 * (y2 - y1) * (v2 - v1);
+            float c = Mathf.Pow((x2 - x1), 2) + Mathf.Pow(y2 - y1, 2);
+            r = solveEquation(a,b,c);
+            middlePos = (currentPos + r * currentOrthoDir + targetPos + targetOrthoDir*r) / 2;
         }
         else//d情况
         {
@@ -102,7 +114,11 @@ public class Steinickef_Redirector : Redirector
         }
         //不考虑e情况，因为可以把e情况当a情况考虑，虽然可能会有圆弧的曲率过大，但是这篇论文算法本身就不能保证所有路径曲率在max范围内
 
-
+    }
+    public float solveEquation(float a, float b, float c)
+    {
+        float delta = b*b - 4*a*c;
+        return (-b + Mathf.Sqrt(delta)) / (2 * a);
     }
     public override void ApplyRedirection()
     {
@@ -145,9 +161,23 @@ public class Steinickef_Redirector : Redirector
                 }
                 case PathType.c:
                 {
-                    /////c情况如上所说，两条圆弧半径非常难算，待解决此问题
-                    ///
-                    break;
+                        if (!passMiddlePoint)
+                        {
+                            if (deltaPos.magnitude / redirectionManager.GetDeltaTime() > MOVEMENT_THRESHOLD) //User is moving
+                            {
+                                //走过的角度
+                                rotationFromCurvatureGain = Mathf.Rad2Deg * (deltaPos.magnitude / r);
+                            }
+                        }
+                        else
+                        {
+                            if (deltaPos.magnitude / redirectionManager.GetDeltaTime() > MOVEMENT_THRESHOLD) //User is moving
+                            {
+                                //走过的角度
+                                rotationFromCurvatureGain = -Mathf.Rad2Deg * (deltaPos.magnitude / r);
+                            }
+                        }
+                        break;
                 }
                 case PathType.d:
                 {
