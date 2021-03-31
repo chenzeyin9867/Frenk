@@ -1,9 +1,6 @@
 import os
-import gym
 import numpy as np
 import torch
-from gym.spaces.box import Box
-from a2c_ppo_acktr.distributions import FixedNormal
 import random
 import matplotlib.pyplot as plt
 import math
@@ -83,14 +80,15 @@ def toTensor(x):
     return torch.Tensor(x)
 
 
-class PassiveHapticsEnv(object, radius=0.5, random=False):
+class PassiveHapticsEnv(object):
     '''
     Frenk part params
     '''
+    action_repeat = 10
     target_x = 0.0
     target_y = 0.0
-    target_dir = 0.0
-    pathType = 'i' # initial state
+    target_dir = -3*PI/4
+    pathType = 'i'  # initial state
     currentPos = np.array([0.0, 0.0])
     targetPos = np.array([0.0, 0.0])
     currentDir = np.array([0.0, 0.0])
@@ -98,11 +96,16 @@ class PassiveHapticsEnv(object, radius=0.5, random=False):
     radius = 0.0
     tangentPos = np.array([0.0, 0.0])
     passedTangent = False
-    def __init__(self):
+    gt = 1.0
+    gc = 0.0  # in this paper, we only take gt and gc into consideration
+
+    def __init__(self, path, radius=0.5, random=False):
         self.v_direction = 0
         self.p_direction = 0
-        self.obj_x = 4.0
-        self.obj_y = 4.0
+        self.obj_x_v = 4.0
+        self.obj_y_v = 4.0
+        self.obj_x_p = WIDTH / 2
+        self.obj_y_p = WIDTH / 2
         self.obj_d = PI / 4.0
         self.x_physical = 0
         self.y_physical = 0
@@ -114,124 +117,102 @@ class PassiveHapticsEnv(object, radius=0.5, random=False):
 
         self.path_cnt = 0
         # print(random)
-        if not random:
-            self.pas_path_file = np.load('./Dataset/new_passive_haptics_path.npy', allow_pickle=True)
-            # print("Loading the /Dataset/passive_haptics_path.npy---------")
-        else:
-            self.pas_path_file = np.load('./Dataset/random_path.npy', allow_pickle=True)
-            # print("Loading the /Dataset/random_path.npy---------")
-        self.v_path = self.pas_path_file[self.path_cnt]
+        self.v_path = path
         self.v_step_pointer = 0  # the v_path counter
 
         # target_x = 0.0
         # target_y = 0.0
 
-    def reset(self):
-        self.pathType = 'i'
-        self.v_path = self.pas_path_file[self.path_cnt]
-        self.path_cnt += 1  # next v_path
-        self.path_cnt = self.path_cnt % len(self.pas_path_file)
-        self.v_direction = 0
-        self.p_direction = 0
-        self.v_step_pointer = 0
-
-        self.time_step = 0
-        self.direction_change_num = 0
-        self.delta_direction_per_iter = 0
-
-        self.x_virtual, self.y_virtual, self.v_direction, self.delta_direction_per_iter \
-            = self.v_path[self.v_step_pointer]
-        x, y, d = initialize(seed)
-        self.x_physical = x
-        self.y_physical = y
-        self.p_direction = d
-
-        return self.obs
-
-    def step(self, action):
-        gt, gr, gc = split(action)
-        # print(gt.item(), gr.item(), gc.item())
-        k = random.randint(5, 10)  # action repetition
-        reward = torch.Tensor([0.0])
-        for ep in range(k):  # for every iter, get the virtual path info, and steering
-            self.vPathUpdate()
-            signal = self.physical_step(gt, gr, gc)  # steering the physical env using the actions
-            self.time_step += 1
-            if (not signal) or (self.v_step_pointer == len(self.v_path) - 1):  # collision with the wall
-                # reward += self.get_reward()
-                if not signal:  # collide with the wall
-                    reward -= PENALTY
+    '''
+    func to eval a path
+    '''
+    def eval(self):
+        self.x_virtual, self.y_virtual, self.v_direction, self.delta_direction_per_iter = self.v_path[
+            self.v_step_pointer]
+        self.init_eval_state()
+        x_l = []
+        y_l = []
+        cnt = 0
+        signal = True
+        while cnt < len(self.v_path):
+            self.calculatePath()
+            self.ApplyRedirection()
+            # print(self.gt, self.gc)
+            # print(self.pathType)
+            for iter in range(self.action_repeat):
+                if cnt == len(self.v_path) - 1:
+                    signal = False
+                    break
+                signal = self.step()
+                x_l.append(self.x_physical)
+                y_l.append(self.y_physical)
+                cnt = cnt + 1
+                if not signal:
+                    break
+            if not signal:
                 break
-            elif ep == 0:
-                tmp_r = self.get_reward()
-            #     tmp_ = 0
-            # else:
-            #     reward += self.get_reward()
-            reward += tmp_r
-            # print(tmp_r)
-        obs = self.current_obs[9:]
-        obs.extend([(self.x_physical + DELTA_X) / WIDTH_ALL, (self.y_physical + DELTA_Y) / WIDTH_ALL,
-                    (self.p_direction + PI) / (2 * PI),
-                    self.x_virtual / WIDTH_ALL, self.y_virtual / HEIGHT_ALL, (self.v_direction + PI) / (2 * PI),
-                    self.obj_x / WIDTH_ALL, self.obj_y / HEIGHT_ALL, (self.obj_d + PI) / (2 * PI)])
-        self.current_obs = obs
-        obs = toTensor(obs)
-        ret_reward = reward
-        self.reward += reward
-        if not signal:  # reset the env
-            bad_mask = 1
-            r_reward = self.reward
-            self.reset()
-            return obs, ret_reward, [1], [bad_mask], r_reward
-        elif signal and self.v_step_pointer >= len(self.v_path) - 1:
-            r_reward = self.reward
-            self.reset()
-            return obs, ret_reward, [1], [0], r_reward
-        else:
-            return obs, ret_reward, [0], [0], ret_reward
+        return x_l, y_l
+
+    def init_eval_state(self):
+        # ratio = WIDTH / WIDTH_ALL
+        # if abs(self.x_virtual) < 0.1:
+        #     self.x_physical = 0
+        #     self.y_physical = self.y_virtual * ratio
+        #     self.p_direction = 0
+        # elif abs(self.y_virtual - HEIGHT_ALL) < 0.1:
+        #     self.x_physical = self.x_virtual * ratio
+        #     self.y_physical = HEIGHT
+        #     self.p_direction = -PI / 2
+        # elif abs(self.x_virtual - WIDTH_ALL) < 0.1:
+        #     self.x_physical = WIDTH
+        #     self.y_physical = self.y_virtual * ratio
+        #     self.p_direction = -PI
+        # elif abs(self.y_virtual) < 0.1:
+        #     self.x_physical = self.x_virtual * ratio
+        #     self.y_physical = 0
+        #     self.p_direction = PI / 2
+        m = np.random.randint(0, 4)
+        n = np.random.random()
+        if m == 0:
+            self.x_physical = 0
+            self.y_physical = HEIGHT * n
+            self.p_direction = 0
+        elif m == 1:
+            self.x_physical = WIDTH * n
+            self.y_physical = HEIGHT
+            self.p_direction = -PI / 2
+        elif m == 2:
+            self.x_physical = WIDTH
+            self.y_physical = HEIGHT * n
+            self.p_direction = -PI
+        elif m == 3:
+            self.x_physical = WIDTH * n
+            self.y_physical = 0
+            self.p_direction = PI / 2
 
     def vPathUpdate(self):
         self.x_virtual, self.y_virtual, self.v_direction, self.delta_direction_per_iter = \
             self.v_path[self.v_step_pointer]  # unpack the next timestep virtual value
         self.v_step_pointer += 1
 
-    def physical_step(self, gt, gr, gc):
-        delta_curvature = gc * VELOCITY
-        delta_rotation = self.delta_direction_per_iter / gr
+    def physical_step(self):
+        delta_curvature = self.gc * VELOCITY
+        delta_rotation = self.delta_direction_per_iter
         self.p_direction = norm(self.p_direction + delta_curvature + delta_rotation)
-        delta_dis = VELOCITY / gt
-        self.x_physical = self.x_physical + torch.cos(self.p_direction) * delta_dis
-        self.y_physical = self.y_physical + torch.sin(self.p_direction) * delta_dis
+        delta_dis = VELOCITY / self.gt
+        self.x_physical = self.x_physical + np.cos(self.p_direction) * delta_dis
+        self.y_physical = self.y_physical + np.sin(self.p_direction) * delta_dis
         if outbound(self.x_physical, self.y_physical):
             return False
         else:
             return True
 
-    """
-    when in eval mode, initialize the user's postion
-    """
+    def step(self):
+        self.vPathUpdate()
+        signal = self.physical_step()  # steering the physical env using the actions
+        return signal
 
-    def init_eval_state(self, ind):
-        m = ind % 4
-        n = ind % 4 + 1
-        ratio = WIDTH / WIDTH_ALL
-        if abs(self.x_virtual) < 0.1:
-            self.x_physical = 0
-            self.y_physical = self.y_virtual * ratio
-            self.p_direction = 0
-        elif abs(self.y_virtual - HEIGHT_ALL) < 0.1:
-            self.x_physical = self.x_virtual * ratio
-            self.y_physical = HEIGHT
-            self.p_direction = -PI / 2
-        elif abs(self.x_virtual - WIDTH_ALL) < 0.1:
-            self.x_physical = WIDTH
-            self.y_physical = self.y_virtual * ratio
-            self.p_direction = -PI
-        elif abs(self.y_virtual) < 0.1:
-            self.x_physical = self.x_virtual * ratio
-            self.y_physical = 0
-            self.p_direction = PI / 2
-        # self.p_direction = self.v_direction
+
 
     def err_angle(self):
         return abs(delta_angle_norm(self.p_direction - self.v_direction))
@@ -257,35 +238,34 @@ class PassiveHapticsEnv(object, radius=0.5, random=False):
     """
     compute the length of current physical path in order to compute the in-time translation gain
     """
+
     def getLengthOfPhysicalPath(self):
         if self.pathType == 'a':
-            deltaAngle = abs(delta_angle_norm(self.targetDir - self.currentDir))
+            deltaAngle = abs(delta_angle_norm(self.target_dir - self.p_direction))
             circleLength = self.radius * deltaAngle
             lineSegmentLength = distance(self.tangentPos[0], self.tangentPos[1], self.targetPos[0], self.targetPos[1])
             return lineSegmentLength + circleLength
         elif self.pathType == 'b' or self.pathType == 'd':
-            deltaAngle = abs(delta_angle_norm(self.targetDir - self.currentDir))
+            deltaAngle = abs(delta_angle_norm(self.target_dir - self.p_direction))
             circleLength = self.radius * deltaAngle
             lineSegmentLength = distance(self.currentPos[0], self.currentPos[1], self.tangentPos[0], self.tangentPos[1])
             return lineSegmentLength + circleLength
-        elif self.pathType == 'c': # 90 degree circle and second part circle
+        elif self.pathType == 'c':  # 90 degree circle and second part circle
             part2Angle = abs(np.arctan(self.targetDir[1] / self.targetDir[0]))
-            return (PI/2 + part2Angle) * self.radius
+            return (PI / 2 + part2Angle) * self.radius
 
     def getLengthOfVirtualPath(self):
-        return distance(self.x_virtual, self.y_virtual, self.obj_x, self.obj_y)
-
-
+        return distance(self.x_virtual, self.y_virtual, self.obj_x_v, self.obj_y_v)
 
     def calculatePath(self):
         self.currentPos = np.array([self.x_physical, self.y_physical])
         self.currentDir = np.array([np.cos(self.p_direction), np.sin(self.p_direction)])  # physical direction
-        self.targetPos = np.array([self.obj_x, self.obj_y])
+        self.targetPos = np.array([self.obj_x_p, self.obj_y_p])
         self.targetDir = np.array([np.cos(self.target_dir), np.sin(self.target_dir)])
         x1 = self.x_physical
         y1 = self.y_physical
-        x2 = self.target_x
-        y2 = self.target_y
+        x2 = self.targetPos[0]
+        y2 = self.targetPos[1]
         s1 = np.cos(self.p_direction)
         t1 = np.sin(self.p_direction)
         s2 = np.cos(self.target_dir)
@@ -298,7 +278,7 @@ class PassiveHapticsEnv(object, radius=0.5, random=False):
         n = d2 / d
 
         if s1 * s2 + t1 * t2 > 0 and m > 0 and n < 0:  # situation a or b
-            currentOrthoDir = np.array([-np.sin(self.p_direction, np.cos(self.p_direction))])
+            currentOrthoDir = np.array([-np.sin(self.p_direction), np.cos(self.p_direction)])
             if np.dot(self.targetDir, currentOrthoDir) < 0:
                 currentOrthoDir = - currentOrthoDir
             targetOrthoDir = np.array([-np.sin(self.target_dir), np.cos(self.target_dir)])
@@ -330,7 +310,7 @@ class PassiveHapticsEnv(object, radius=0.5, random=False):
             targetOrthoDir = np.array([-np.sin(self.target_dir), np.cos(self.target_dir)])
             if np.dot(targetOrthoDir, self.currentDir) < 0:
                 targetOrthoDir = - targetOrthoDir
-            currentOrthoDir = np.array([-np.sin(self.p_direction, np.cos(self.p_direction))])
+            currentOrthoDir = np.array([-np.sin(self.p_direction), np.cos(self.p_direction)])
             if np.dot(self.targetDir, currentOrthoDir) < 0:
                 currentOrthoDir = - currentOrthoDir
             u1 = currentOrthoDir[0]
@@ -339,17 +319,17 @@ class PassiveHapticsEnv(object, radius=0.5, random=False):
             v2 = targetOrthoDir[1]
 
             # (x2 + ru2 - x1 - ru1, y2 + rv2 - y1 - rv1) = 2r
-            a = np.power(u2-u1, 2) + np.power(v2 - v1, 2) - 4
-            b = 2*(x2-x1)*(u2-u1) + 2 * (v2-v1)*(y2-y1)
-            c = np.power(x2-x1, 2) + np.power(y2-y1, 2)
-            r = solveEquation(a, b, c);
+            a = np.power(u2 - u1, 2) + np.power(v2 - v1, 2) - 4
+            b = 2 * (x2 - x1) * (u2 - u1) + 2 * (v2 - v1) * (y2 - y1)
+            c = np.power(x2 - x1, 2) + np.power(y2 - y1, 2)
+            r = solveEquation(a, b, c)
             self.tangentPos = (self.currentPos + r * currentOrthoDir + self.targetPos + targetOrthoDir * r) / 2
         else:  # d情况
-            # pathType = PathType.d
+            self.pathType = 'd'
             targetOrthoDir = np.array([-np.sin(self.target_dir), np.cos(self.target_dir)])
             if np.dot(targetOrthoDir, self.currentDir) > 0:
                 targetOrthoDir = - targetOrthoDir
-            currentOrthoDir = np.array([-np.sin(self.p_direction, np.cos(self.p_direction))])
+            currentOrthoDir = np.array([-np.sin(self.p_direction), np.cos(self.p_direction)])
             if np.dot(self.targetDir, currentOrthoDir) > 0:
                 currentOrthoDir = - currentOrthoDir
 
@@ -367,21 +347,25 @@ class PassiveHapticsEnv(object, radius=0.5, random=False):
             self.tangentPos = self.currentPos + p * self.currentDir
         # 不考虑e情况，因为可以把e情况当a情况考虑，虽然可能会有圆弧的曲率过大，但是这篇论文算法本身就不能保证所有路径曲率在max范围内
 
+    '''
+    compute the gt and gc based on different situation
+    '''
+
     def ApplyRedirection(self):
         virtualPathLength = self.getLengthOfVirtualPath()
-        physicalPathLength = self.getLengthOfVirtualPath()
+        physicalPathLength = self.getLengthOfPhysicalPath()
         gt = virtualPathLength / physicalPathLength
         # gt = 1.0
         gc = 0.0
-        if self.pathType == 'a': # situation a
-            if not self.passedTangent: # on the curve, apply a curvature gain
+        if self.pathType == 'a':  # situation a
+            if not self.passedTangent:  # on the curve, apply a curvature gain
                 gc = 1.0 / self.radius
                 if np.cross(self.targetDir, self.currentDir) > 0:
                     gc = -gc
-        elif self.pathType == 'b': # situation b
+        elif self.pathType == 'b':  # situation b
             if self.passedTangent:
                 gc = 1.0 / self.radius
-        elif self.pathType == 'c': # situation c, gc minus when passed the tangent point
+        elif self.pathType == 'c':  # situation c, gc minus when passed the tangent point
             gc = 1.0 / self.radius
             if not self.passedTangent:
                 if np.cross(self.currentDir, self.targetDir) < 0:
@@ -389,21 +373,22 @@ class PassiveHapticsEnv(object, radius=0.5, random=False):
             else:
                 if np.cross(self.currentDir, self.targetDir) > 0:
                     gc = -gc
-        else: # d situation
+        else:  # d situation
             if self.passedTangent:
                 gc = 1.0 / self.radius
                 if np.cross(self.currentDir, self.targetDir) > 0:
                     gc = - gc
 
+        # gc = np.clip(gc, -0.13, 0.13)
+        gt = np.clip(gt, 0.8, 1.26)
+        self.gt = gt
+        self.gc = gc
 
 
+'''
+scale the angle into 0-pi
+'''
 
-
-
-
-    '''
-    scale the angle into 0-pi
-    '''
 
 def delta_angle_norm(x):
     if x >= PI:
