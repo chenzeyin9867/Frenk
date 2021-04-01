@@ -3,7 +3,7 @@ from env import *
 
 def frenk_algorithm(file):
     testData = np.load(file, allow_pickle=True)
-    for _ in range(10):
+    for _ in range(100):
         if _ % 10 == 0:
             print(_)
         passive_haptics_env = PassiveHapticsEnv(testData[_])
@@ -12,9 +12,11 @@ def frenk_algorithm(file):
         plt.subplot(1, 2, 1)
         plt.axis([0.0, 8.0, 0.0, 8.0])
         plt.scatter(testData[_][:, 0], testData[_][:, 1], s=1)
+        plt.scatter(4,4,s=10,c='r')
         plt.subplot(1, 2, 2)
         plt.axis([0.0, 5.79, 0.0, 5.79])
         plt.scatter(x_l, y_l, s=1)
+        plt.scatter(WIDTH/2, WIDTH/2, s=10, c='r')
         plt.savefig('../result/result_'+ str(_) + ".png")
         del passive_haptics_env
 

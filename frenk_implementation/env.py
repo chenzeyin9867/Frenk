@@ -84,10 +84,11 @@ class PassiveHapticsEnv(object):
     '''
     Frenk part params
     '''
+    objRadius = 0.1
     action_repeat = 10
     target_x = 0.0
     target_y = 0.0
-    target_dir = -3*PI/4
+    target_dir = -3 * PI/4
     pathType = 'i'  # initial state
     currentPos = np.array([0.0, 0.0])
     targetPos = np.array([0.0, 0.0])
@@ -97,6 +98,7 @@ class PassiveHapticsEnv(object):
     tangentPos = np.array([0.0, 0.0])
     passedTangent = False
     gt = 1.0
+    gc = 0.0
     gc_part1 = 0.0  # in this paper, we only take gt and gc into consideration
     gc_part2 = 0.0
     firstPartCnt = 0
@@ -137,12 +139,9 @@ class PassiveHapticsEnv(object):
         cnt = 0
         signal = True
         while cnt < len(self.v_path):
-            self.calculatePath()
-            self.ApplyRedirection()
-            print(self.gt, self.gc)
-            print(self.pathType)
-            while (self.delta_direction_per_iter == 0):
-            # for iter in range(self.action_repeat):
+            if not self.isIntersect():
+                self.gc = 0.0
+                self.gt = 1.0
                 if cnt == len(self.v_path) - 1:
                     signal = False
                     break
@@ -152,46 +151,69 @@ class PassiveHapticsEnv(object):
                 cnt = cnt + 1
                 if not signal:
                     break
+            else:
+                print("intersect")
+                self.calculatePath()
+                self.ApplyRedirection()
+                self.gc = self.gc1
+                print(self.gt, self.gc)
+                print(self.pathType)
+                # print(cnt, len(self.v_path))
+                while self.isIntersect():
+                    if cnt == len(self.v_path) - 1:
+                        signal = False
+                        break
+                    signal = self.step()
+                    self.firstPartCnt = self.firstPartCnt - 1
+                    if self.firstPartCnt <= 0:
+                        print("*******here*******")
+                        self.gc = self.gc2
+                    x_l.append(self.x_physical)
+                    y_l.append(self.y_physical)
+                    cnt = cnt + 1
+                    if not signal:
+                        break
             if not signal:
                 break
         return x_l, y_l
 
     def init_eval_state(self):
-        ratio = WIDTH / WIDTH_ALL
-        if abs(self.x_virtual) < 0.1:
-            self.x_physical = 0
-            self.y_physical = self.y_virtual * ratio
-            self.p_direction = 0
-        elif abs(self.y_virtual - HEIGHT_ALL) < 0.1:
-            self.x_physical = self.x_virtual * ratio
-            self.y_physical = HEIGHT
-            self.p_direction = -PI / 2
-        elif abs(self.x_virtual - WIDTH_ALL) < 0.1:
-            self.x_physical = WIDTH
-            self.y_physical = self.y_virtual * ratio
-            self.p_direction = -PI
-        elif abs(self.y_virtual) < 0.1:
-            self.x_physical = self.x_virtual * ratio
-            self.y_physical = 0
-            self.p_direction = PI / 2
-        # m = np.random.randint(0, 4)
-        # n = np.random.random()
-        # if m == 0:
+        # ratio = WIDTH / WIDTH_ALL
+        # if abs(self.x_virtual) < 0.1:
         #     self.x_physical = 0
-        #     self.y_physical = HEIGHT * n
+        #     self.y_physical = self.y_virtual * ratio
         #     self.p_direction = 0
-        # elif m == 1:
-        #     self.x_physical = WIDTH * n
+        # elif abs(self.y_virtual - HEIGHT_ALL) < 0.1:
+        #     self.x_physical = self.x_virtual * ratio
         #     self.y_physical = HEIGHT
         #     self.p_direction = -PI / 2
-        # elif m == 2:
+        # elif abs(self.x_virtual - WIDTH_ALL) < 0.1:
         #     self.x_physical = WIDTH
-        #     self.y_physical = HEIGHT * n
+        #     self.y_physical = self.y_virtual * ratio
         #     self.p_direction = -PI
-        # elif m == 3:
-        #     self.x_physical = WIDTH * n
+        # elif abs(self.y_virtual) < 0.1:
+        #     self.x_physical = self.x_virtual * ratio
         #     self.y_physical = 0
         #     self.p_direction = PI / 2
+        # self.p_direction = self.v_direction
+        m = np.random.randint(0, 4)
+        n = np.random.random()
+        if m == 0:
+            self.x_physical = 0
+            self.y_physical = HEIGHT * n
+            self.p_direction = 0
+        elif m == 1:
+            self.x_physical = WIDTH * n
+            self.y_physical = HEIGHT
+            self.p_direction = -PI / 2
+        elif m == 2:
+            self.x_physical = WIDTH
+            self.y_physical = HEIGHT * n
+            self.p_direction = -PI
+        elif m == 3:
+            self.x_physical = WIDTH * n
+            self.y_physical = 0
+            self.p_direction = PI / 2
 
     def vPathUpdate(self):
         self.x_virtual, self.y_virtual, self.v_direction, self.delta_direction_per_iter = \
@@ -229,12 +251,13 @@ class PassiveHapticsEnv(object):
         a = np.tan(self.v_direction)
         b = self.y_virtual - a * self.x_virtual
         # y = ax + b ----> ax - y + b = 0
-        distance = abs(a * self.x_virtual - self.y_virtual + b) / np.sqrt(
+        distance = abs(a * self.obj_x_v - self.obj_y_v + b) / np.sqrt(
             a * a + 1)  # distance from the centor to the stright line
-        vec_x, vec_y = self.obj_x - self.x_virtual, self.obj_y - self.y_virtual  # vec points the obj
+        print(distance)
+        vec_x, vec_y = self.obj_x_v - self.x_virtual, self.obj_y_v - self.y_virtual  # vec points the obj
         vec_x_, vec_y_ = np.cos(self.v_direction), np.sin(self.v_direction)  # vec of the v_direction
         result = vec_x * vec_x_ + vec_y * vec_y_
-        if result >= 0 and distance <= self.radius:
+        if result >= 0 and distance <= self.objRadius:
             return True
         else:
             return False
@@ -254,11 +277,18 @@ class PassiveHapticsEnv(object):
             deltaAngle = abs(delta_angle_norm(self.target_dir - self.p_direction))
             circleLength = self.radius * deltaAngle
             lineSegmentLength = distance(self.currentPos[0], self.currentPos[1], self.tangentPos[0], self.tangentPos[1])
-            self.firstPartCnt = lineSegmentLength . VELOCITY
+            self.firstPartCnt = lineSegmentLength / VELOCITY
             return lineSegmentLength + circleLength
         elif self.pathType == 'c':  # 90 degree circle and second part circle
-            part2Angle = abs(np.arctan(self.targetDir[1] / self.targetDir[0]))
+            # part2Angle = abs(np.arctan(self.targetDir[1] / self.targetDir[0]))
+            part2Angle = PI/2 - abs(delta_angle_norm(self.p_direction - self.target_dir))
+            # print("angle", part2Angle * 180 /PI)
             self.firstPartCnt = (PI/2) * self.radius / VELOCITY
+            return (PI / 2 + part2Angle) * self.radius
+        elif self.pathType == 'f':
+            part2Angle = PI / 2 + abs(delta_angle_norm(self.p_direction - self.target_dir))
+            # print("angle", part2Angle * 180 /PI)
+            self.firstPartCnt = (PI / 2) * self.radius / VELOCITY
             return (PI / 2 + part2Angle) * self.radius
 
     def getLengthOfVirtualPath(self):
@@ -330,8 +360,32 @@ class PassiveHapticsEnv(object):
             b = 2 * (x2 - x1) * (u2 - u1) + 2 * (v2 - v1) * (y2 - y1)
             c = np.power(x2 - x1, 2) + np.power(y2 - y1, 2)
             r = solveEquation(a, b, c)
+            self.radius = r
             self.tangentPos = (self.currentPos + r * currentOrthoDir + self.targetPos + targetOrthoDir * r) / 2
+        elif m > 0 and n > 0: # not mention on the paper, but similary with c
+            self.pathType = 'f'
+            targetOrthoDir = np.array([-np.sin(self.target_dir), np.cos(self.target_dir)])
+            if np.dot(targetOrthoDir, self.currentDir) > 0:
+                targetOrthoDir = - targetOrthoDir
+            currentOrthoDir = np.array([-np.sin(self.p_direction), np.cos(self.p_direction)])
+            if np.dot(self.targetDir, currentOrthoDir) > 0:
+                currentOrthoDir = - currentOrthoDir
+            u1 = currentOrthoDir[0]
+            v1 = currentOrthoDir[1]
+            u2 = targetOrthoDir[0]
+            v2 = targetOrthoDir[1]
+
+            # (x2 + ru2 - x1 - ru1, y2 + rv2 - y1 - rv1) = 2r
+            a = np.power(u2 - u1, 2) + np.power(v2 - v1, 2) - 4
+            b = 2 * (x2 - x1) * (u2 - u1) + 2 * (v2 - v1) * (y2 - y1)
+            c = np.power(x2 - x1, 2) + np.power(y2 - y1, 2)
+            r = solveEquation(a, b, c)
+            self.radius = r
+            self.tangentPos = (self.currentPos + r * currentOrthoDir + self.targetPos + targetOrthoDir * r) / 2
+
+            # print("Special situation!****************" * 10)
         else:  # d情况
+            # print(m , n)
             self.pathType = 'd'
             targetOrthoDir = np.array([-np.sin(self.target_dir), np.cos(self.target_dir)])
             if np.dot(targetOrthoDir, self.currentDir) > 0:
@@ -364,7 +418,7 @@ class PassiveHapticsEnv(object):
         gt = virtualPathLength / physicalPathLength
         # gt = 1.0
         gc1 = 0.0
-        gc2 - 0.0
+        gc2 = 0.0
         if self.pathType == 'a':  # situation a
             gc1 = 1.0 / self.radius
             if np.cross(self.targetDir, self.currentDir) > 0:
@@ -382,19 +436,30 @@ class PassiveHapticsEnv(object):
             elif np.cross(self.currentDir, self.targetDir) > 0:
                 gc1 = gc
                 gc2 = -gc
+        elif self.pathType == 'f':
+            gc = 1.0 / self.radius
+            if np.cross(self.currentDir, self.targetDir) > 0:
+                gc1 = -gc
+                gc2 = gc
+            elif np.cross(self.currentDir, self.targetDir) < 0:
+                gc1 = gc
+                gc2 = -gc
         else:  # d situation
             gc1 = 0.0
             gc2 = 1.0 / self.radius
             if np.cross(self.currentDir, self.targetDir) > 0:
                 gc2 = - gc2
 
-        # gc = np.clip(gc, -0.13, 0.13)
-        gt = np.clip(gt, 0.8, 1.26)
+        # gc1 = np.clip(gc1, -0.13, 0.13)
+        # gc2 = np.clip(gc2, -0.13, 0.13)
+        # gt = np.clip(gt, 0.8, 1.26)
         self.gt = gt
         self.gc1 = gc1
         self.gc2 = gc2
 
-
+    def print(self):
+        print("virtual:", self.x_virtual, self.y_virtual, self.v_direction, self.delta_direction_per_iter)
+        print("physical:", self.x_physical, self.y_physical, self.p_direction)
 '''
 scale the angle into 0-pi
 '''
@@ -410,4 +475,7 @@ def delta_angle_norm(x):
 
 def solveEquation(a, b, c):
     delta = b * b - 4 * a * c
-    return (-b + np.sqrt(delta)) / (2 * a)
+    if ((-b + np.sqrt(delta)) / (2 * a)) > 0:
+        return (-b + np.sqrt(delta)) / (2 * a)
+    return (-b - np.sqrt(delta)) / (2 * a)
+    # return (-b + np.sqrt(delta)) / (2 * a) > 0
