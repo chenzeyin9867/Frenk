@@ -3,7 +3,7 @@ from env import *
 
 def frenk_algorithm(file):
     testData = np.load(file, allow_pickle=True)
-    for _ in range(100):
+    for _ in range(10):
         if _ % 10 == 0:
             print(_)
         passive_haptics_env = PassiveHapticsEnv(testData[_])
@@ -19,5 +19,5 @@ def frenk_algorithm(file):
         del passive_haptics_env
 
 if __name__ == "__main__":
-    pathFile = '/home/czy/MyWorkSpace/Frenk/dataset/new_passive_haptics_path.npy'
+    pathFile = '../dataset/new_passive_haptics_path.npy'
     frenk_algorithm(pathFile)
