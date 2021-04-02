@@ -84,11 +84,11 @@ class PassiveHapticsEnv(object):
     '''
     Frenk part params
     '''
-    objRadius = 0.1
+    objRadius = 0.3
     action_repeat = 10
     target_x = 0.0
     target_y = 0.0
-    target_dir = -3 * PI/4
+    target_dir = -3 * PI / 4
     pathType = 'i'  # initial state
     currentPos = np.array([0.0, 0.0])
     targetPos = np.array([0.0, 0.0])
@@ -103,7 +103,7 @@ class PassiveHapticsEnv(object):
     gc_part2 = 0.0
     firstPartCnt = 0
 
-    def __init__(self, path, radius=0.5, random=False):
+    def __init__(self, path, ind, radius=0.5, random=False):
         self.v_direction = 0
         self.p_direction = 0
         self.obj_x_v = 4.0
@@ -118,7 +118,7 @@ class PassiveHapticsEnv(object):
         self.time_step = 0
         self.direction_change_num = 0
         self.delta_direction_per_iter = 0
-
+        self.ind = ind
         self.path_cnt = 0
         # print(random)
         self.v_path = path
@@ -130,6 +130,7 @@ class PassiveHapticsEnv(object):
     '''
     func to eval a path
     '''
+
     def eval(self):
         self.x_virtual, self.y_virtual, self.v_direction, self.delta_direction_per_iter = self.v_path[
             self.v_step_pointer]
@@ -152,12 +153,12 @@ class PassiveHapticsEnv(object):
                 if not signal:
                     break
             else:
-                print("intersect")
+                # print("intersect")
                 self.calculatePath()
                 self.ApplyRedirection()
                 self.gc = self.gc1
-                print(self.gt, self.gc)
-                print(self.pathType)
+                # print(self.gt, self.gc)
+                # print(self.pathType)
                 # print(cnt, len(self.v_path))
                 while self.isIntersect():
                     if cnt == len(self.v_path) - 1:
@@ -166,7 +167,7 @@ class PassiveHapticsEnv(object):
                     signal = self.step()
                     self.firstPartCnt = self.firstPartCnt - 1
                     if self.firstPartCnt <= 0:
-                        print("*******here*******")
+                        # print("*******here*******")
                         self.gc = self.gc2
                     x_l.append(self.x_physical)
                     y_l.append(self.y_physical)
@@ -178,42 +179,42 @@ class PassiveHapticsEnv(object):
         return x_l, y_l
 
     def init_eval_state(self):
-        # ratio = WIDTH / WIDTH_ALL
-        # if abs(self.x_virtual) < 0.1:
-        #     self.x_physical = 0
-        #     self.y_physical = self.y_virtual * ratio
-        #     self.p_direction = 0
-        # elif abs(self.y_virtual - HEIGHT_ALL) < 0.1:
-        #     self.x_physical = self.x_virtual * ratio
-        #     self.y_physical = HEIGHT
-        #     self.p_direction = -PI / 2
-        # elif abs(self.x_virtual - WIDTH_ALL) < 0.1:
-        #     self.x_physical = WIDTH
-        #     self.y_physical = self.y_virtual * ratio
-        #     self.p_direction = -PI
-        # elif abs(self.y_virtual) < 0.1:
-        #     self.x_physical = self.x_virtual * ratio
-        #     self.y_physical = 0
-        #     self.p_direction = PI / 2
-        # self.p_direction = self.v_direction
-        m = np.random.randint(0, 4)
-        n = np.random.random()
-        if m == 0:
+        ratio = WIDTH / WIDTH_ALL
+        if abs(self.x_virtual) < 0.1:
             self.x_physical = 0
-            self.y_physical = HEIGHT * n
+            self.y_physical = self.y_virtual * ratio
             self.p_direction = 0
-        elif m == 1:
-            self.x_physical = WIDTH * n
+        elif abs(self.y_virtual - HEIGHT_ALL) < 0.1:
+            self.x_physical = self.x_virtual * ratio
             self.y_physical = HEIGHT
             self.p_direction = -PI / 2
-        elif m == 2:
+        elif abs(self.x_virtual - WIDTH_ALL) < 0.1:
             self.x_physical = WIDTH
-            self.y_physical = HEIGHT * n
+            self.y_physical = self.y_virtual * ratio
             self.p_direction = -PI
-        elif m == 3:
-            self.x_physical = WIDTH * n
+        elif abs(self.y_virtual) < 0.1:
+            self.x_physical = self.x_virtual * ratio
             self.y_physical = 0
             self.p_direction = PI / 2
+        self.p_direction = self.v_direction
+        # m = np.random.randint(0, 4)
+        # n = np.random.random()
+        # if m == 0:
+        #     self.x_physical = 0
+        #     self.y_physical = HEIGHT * n
+        #     self.p_direction = 0
+        # elif m == 1:
+        #     self.x_physical = WIDTH * n
+        #     self.y_physical = HEIGHT
+        #     self.p_direction = -PI / 2
+        # elif m == 2:
+        #     self.x_physical = WIDTH
+        #     self.y_physical = HEIGHT * n
+        #     self.p_direction = -PI
+        # elif m == 3:
+        #     self.x_physical = WIDTH * n
+        #     self.y_physical = 0
+        #     self.p_direction = PI / 2
 
     def vPathUpdate(self):
         self.x_virtual, self.y_virtual, self.v_direction, self.delta_direction_per_iter = \
@@ -234,11 +235,9 @@ class PassiveHapticsEnv(object):
             return True
 
     def step(self):
-        self.vPathUpdate()                                                               
+        self.vPathUpdate()
         signal = self.physical_step()  # steering the physical env using the actions
         return signal
-
-
 
     def err_angle(self):
         return abs(delta_angle_norm(self.p_direction - self.v_direction))
@@ -253,7 +252,7 @@ class PassiveHapticsEnv(object):
         # y = ax + b ----> ax - y + b = 0
         distance = abs(a * self.obj_x_v - self.obj_y_v + b) / np.sqrt(
             a * a + 1)  # distance from the centor to the stright line
-        print(distance)
+        # print(distance)
         vec_x, vec_y = self.obj_x_v - self.x_virtual, self.obj_y_v - self.y_virtual  # vec points the obj
         vec_x_, vec_y_ = np.cos(self.v_direction), np.sin(self.v_direction)  # vec of the v_direction
         result = vec_x * vec_x_ + vec_y * vec_y_
@@ -264,13 +263,13 @@ class PassiveHapticsEnv(object):
 
     """
     compute the length of current physical path in order to compute the in-time translation gain
-    """                                                
+    """
 
     def getLengthOfPhysicalPath(self):
         if self.pathType == 'a':
             deltaAngle = abs(delta_angle_norm(self.target_dir - self.p_direction))
             circleLength = self.radius * deltaAngle
-            self.firstPartCnt = circleLength / VELOCITY #the cnt of the circle
+            self.firstPartCnt = circleLength / VELOCITY  # the cnt of the circle
             lineSegmentLength = distance(self.tangentPos[0], self.tangentPos[1], self.targetPos[0], self.targetPos[1])
             return lineSegmentLength + circleLength
         elif self.pathType == 'b' or self.pathType == 'd':
@@ -281,9 +280,9 @@ class PassiveHapticsEnv(object):
             return lineSegmentLength + circleLength
         elif self.pathType == 'c':  # 90 degree circle and second part circle
             # part2Angle = abs(np.arctan(self.targetDir[1] / self.targetDir[0]))
-            part2Angle = PI/2 - abs(delta_angle_norm(self.p_direction - self.target_dir))
+            part2Angle = PI / 2 - abs(delta_angle_norm(self.p_direction - self.target_dir))
             # print("angle", part2Angle * 180 /PI)
-            self.firstPartCnt = (PI/2) * self.radius / VELOCITY
+            self.firstPartCnt = (PI / 2) * self.radius / VELOCITY
             return (PI / 2 + part2Angle) * self.radius
         elif self.pathType == 'f':
             part2Angle = PI / 2 + abs(delta_angle_norm(self.p_direction - self.target_dir))
@@ -314,7 +313,8 @@ class PassiveHapticsEnv(object):
         m = d1 / d
         n = d2 / d
 
-        if s1 * s2 + t1 * t2 > 0 and m > 0 and n < 0:  # situation a or b
+        if m > 0 and n < 0:  # situation a or b
+            # print(self.ind)
             currentOrthoDir = np.array([-np.sin(self.p_direction), np.cos(self.p_direction)])
             if np.dot(self.targetDir, currentOrthoDir) < 0:
                 currentOrthoDir = - currentOrthoDir
@@ -362,7 +362,7 @@ class PassiveHapticsEnv(object):
             r = solveEquation(a, b, c)
             self.radius = r
             self.tangentPos = (self.currentPos + r * currentOrthoDir + self.targetPos + targetOrthoDir * r) / 2
-        elif m > 0 and n > 0: # not mention on the paper, but similary with c
+        elif m > 0 and n > 0:  # not mention on the paper, but similary with c
             self.pathType = 'f'
             targetOrthoDir = np.array([-np.sin(self.target_dir), np.cos(self.target_dir)])
             if np.dot(targetOrthoDir, self.currentDir) > 0:
@@ -384,8 +384,8 @@ class PassiveHapticsEnv(object):
             self.tangentPos = (self.currentPos + r * currentOrthoDir + self.targetPos + targetOrthoDir * r) / 2
 
             # print("Special situation!****************" * 10)
-        else:  # d情况
-            # print(m , n)
+        elif m < 0 and n > 0:  # d情况
+            print("Type_d:", self.ind)
             self.pathType = 'd'
             targetOrthoDir = np.array([-np.sin(self.target_dir), np.cos(self.target_dir)])
             if np.dot(targetOrthoDir, self.currentDir) > 0:
@@ -460,9 +460,16 @@ class PassiveHapticsEnv(object):
     def print(self):
         print("virtual:", self.x_virtual, self.y_virtual, self.v_direction, self.delta_direction_per_iter)
         print("physical:", self.x_physical, self.y_physical, self.p_direction)
-'''
-scale the angle into 0-pi
-'''
+
+    '''
+    scale the angle into 0-pi
+    '''
+
+    def plot(self):
+        plt.axis([0.0, WIDTH, 0.0, WIDTH])
+        plt.scatter(self.targetPos[0], self.targetPos[1], s=10, c='r')
+        plt.scatter(self.currentPos[0], self.currentPos[1], s=10, c='b')
+        plt.show()
 
 
 def delta_angle_norm(x):
