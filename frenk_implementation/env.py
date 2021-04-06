@@ -104,7 +104,6 @@ class PassiveHapticsEnv(object):
     gc_part1 = 0.0  # in this paper, we only take gt and gc into consideration
     gc_part2 = 0.0
     firstPartCnt = 0
-
     def __init__(self, path, ind, radius=0.5, random=False):
         self.v_direction = 0
         self.p_direction = 0
@@ -125,7 +124,8 @@ class PassiveHapticsEnv(object):
         # print(random)
         self.v_path = path
         self.v_step_pointer = 0  # the v_path counter
-
+        self.x_l = []
+        self.y_l = []
         # target_x = 0.0
         # target_y = 0.0
 
@@ -149,11 +149,13 @@ class PassiveHapticsEnv(object):
         signal = True
         while cnt < len(self.v_path):
             if not self.isIntersect():
-                self.gc = 0.0
+                # self.gc = 0.0
                 self.gt = 1.0
+                # self.calculate_s2c()
                 if cnt == len(self.v_path) - 1:
                     signal = False
                     break
+                # print(self.gc)
                 signal = self.step()
                 x_l.append(self.x_physical)
                 y_l.append(self.y_physical)
@@ -172,9 +174,9 @@ class PassiveHapticsEnv(object):
                 tangentPos_l_y.append(self.tangentPos[1])
                 self.gc = self.gc1
                 # if self.pathType == 'f':
-                print("ind:", self.ind, "\tPathType:", self.pathType,
-                          "\ttangentPos:", self.tangentPos, "\tradius:", self.radius,
-                         'gc:', self.gc)
+                # print("ind:", self.ind, "\tPathType:", self.pathType,
+                #           "\ttangentPos:", self.tangentPos, "\tradius:", self.radius,
+                #          'gc:', self.gc)
                     # print(self.gt, self.gc)
                 # print(self.pathType)
                 # print(cnt, len(self.v_path))
@@ -184,7 +186,7 @@ class PassiveHapticsEnv(object):
                         break
                     signal = self.step()
                     self.firstPartCnt = self.firstPartCnt - 1
-                    if self.firstPartCnt <= 0:
+                    if self.firstPartCnt <= 1:
                         # print("*******here*******")
                         self.gc = self.gc2
                     x_l.append(self.x_physical)
@@ -194,10 +196,49 @@ class PassiveHapticsEnv(object):
                         break
             if not signal:
                 break
-        return x_l, y_l, x_v_flag, y_v_flag, x_p_flag, y_p_flag, tangentPos_l_x, tangentPos_l_y
+        # if self.ind == 94:
+        #     print("94")
+        self.x_physical = np.clip(self.x_physical, 0, WIDTH)
+        self.y_physical = np.clip(self.y_physical, 0, HEIGHT)
+        final_dis = distance(self.x_physical, self.y_physical, self.obj_x_p, self.obj_y_p)
+        final_ang = abs(delta_angle_norm(self.p_direction - self.target_dir))
+        print(self.ind, ":\tdis:{:.2f}\tang:{:.2f}".format(final_dis, final_ang))
+        return x_l, y_l, x_v_flag, y_v_flag, x_p_flag, y_p_flag, tangentPos_l_x, tangentPos_l_y, final_dis, final_ang
+
+    def eval_none(self):
+        self.x_virtual, self.y_virtual, self.v_direction, self.delta_direction_per_iter = self.v_path[
+            self.v_step_pointer]
+        self.init_eval_state()
+        x_l = []
+        y_l = []
+        x_v_flag = []
+        y_v_flag = []
+        x_p_flag = []
+        y_p_flag =[]
+        tangentPos_l_x = []
+        tangentPos_l_y = []
+        cnt = 0
+        signal = True
+        while cnt < len(self.v_path):
+            # self.gc = 0.0
+            self.gt = 1.0
+            self.calculate_s2c()
+            self.x_l.append(self.x_physical)
+            self.y_l.append(self.y_physical)
+            signal = self.step()
+            x_l.append(self.x_physical)
+            y_l.append(self.y_physical)
+            cnt = cnt + 1
+            if not signal:
+                break
+
+        final_dis = distance(self.x_physical, self.y_physical, self.obj_x_p, self.obj_y_p)
+        final_ang = abs(delta_angle_norm(self.p_direction - self.target_dir))
+        # print(self.ind, ":\tdis:{:.2f}\tang:{:.2f}".format(final_dis, final_ang))
+        return x_l, y_l, final_dis, final_ang
 
     def init_eval_state(self):
-        flag = False
+        flag = True
         if flag:
             ratio = WIDTH / WIDTH_ALL
             if abs(self.x_virtual) < 0.1:
@@ -216,7 +257,7 @@ class PassiveHapticsEnv(object):
                 self.x_physical = self.x_virtual * ratio
                 self.y_physical = 0
                 self.p_direction = PI / 2
-            self.p_direction = self.v_direction
+            # self.p_direction = self.v_direction
         else:
             m = np.random.randint(0, 4)
             n = np.random.random()
@@ -539,7 +580,10 @@ class PassiveHapticsEnv(object):
 
         # gc1 = np.clip(gc1, -0.13, 0.13)
         # gc2 = np.clip(gc2, -0.13, 0.13)
-        # gt = np.clip(gt, 0.8, 1.26)
+        # gt = np.clip(gt, 0.2, 5.0)
+        # gc1 = np.clip(gc1, -3, 3)
+        # gc2 = np.clip(gc2, -3, 3)
+        # gt = np.clip(gt, 0.2, 5.0)
         self.gt = gt
         self.gc1 = gc1
         self.gc2 = gc2
@@ -555,9 +599,96 @@ class PassiveHapticsEnv(object):
 
     def plot(self):
         plt.axis([0.0, WIDTH, 0.0, WIDTH])
-        plt.scatter(self.targetPos[0], self.targetPos[1], s=10, c='r')
-        plt.scatter(self.currentPos[0], self.currentPos[1], s=10, c='b')
+        plt.scatter(self.x_l, self.y_l, s=10, c='r')
+        plt.scatter(self.obj_x_p, self.obj_y_p, s=30, c='b')
         plt.show()
+
+    '''
+    when no intersect, using the s2c algorthm
+    '''
+    def calculate_s2c(self):
+        gamma = 0.15
+        if self.ind == 3:
+            print('here')
+        midPoint = np.array([(self.x_physical + self.obj_x_p)/2.0, (self.y_physical + self.obj_y_p)/2.0])
+        vec1 = np.array([self.obj_x_p-self.x_physical, self.obj_y_p - self.y_physical])
+        vec2 = np.array([-vec1[1], vec1[0]])
+        currentOrth = np.array([-np.sin(self.p_direction), np.cos(self.p_direction)])
+        currentDir = np.array([np.cos(self.p_direction), np.sin(self.p_direction)])
+        a1_flag = False # whether x = 1 this type
+        a2_flag = False
+        a1 = a2 = b1 = b2 = 0
+
+        """
+        The situation that current direction passed the center
+        """
+        if ((vec1[0] * currentDir[1] == vec1[1] * currentDir[0]) and np.dot(vec1,
+                                                                           currentDir) > 0) or distance(self.x_physical,self.y_physical, self.obj_x_p, self.obj_y_p) < 0.1: # the current dir pass the
+            gc = 0.0
+            self.gc = gc * gamma + (1-gamma) * self.gc
+        elif (distance(self.x_physical, self.y_physical, self.obj_x_p, self.obj_y_p) < 1.25) and (abs(np.arccos(
+                np.dot(-vec1, currentDir) / math.sqrt(vec1[0] * vec1[0] + vec1[1] * vec1[1]))) < PI / 9.0) and np.dot(
+                -vec1, currentDir) > 0:
+            radius = 10
+            gc = 1.0 / radius
+            if np.cross(-vec1, currentDir) > 0:
+                gc = -gc
+            # self.gc = gc
+            self.gc = gc * gamma + (1-gamma) * self.gc
+        else:
+            if np.dot(vec1, currentOrth) < 0:
+                currentOrth = -currentOrth
+            if currentOrth[0] > 1e-5:
+                a1 = currentOrth[1] / currentOrth[0]
+                b1 = self.y_physical - a1 * self.x_physical
+            else:
+                a1_flag = True
+                a1 = self.x_physical
+            if vec2[0] > 1e-5:
+                a2 = vec2[1] / vec2[0]
+                b2 = midPoint[1] - a2 * midPoint[0]
+            else:
+                a2_flag = True
+                a2 = midPoint[0]
+            center = compute_intersection(a1, b1, a2, b2, a1_flag, a2_flag)
+            radius = distance(self.x_physical, self.y_physical, center[0], center[1])
+                        # print(radius)
+            gc = 1.0 / radius
+            # if (distance(self.x_physical, self.y_physical, self.obj_x_p, self.obj_y_p) < 1.25) and (abs(np.arccos(
+            #         np.dot(vec1, currentDir) / math.sqrt(
+            #             vec1[0] * vec1[0] + vec1[1] * vec1[1]))) < PI / 4.0) and np.dot(
+            #     vec1, currentDir) > 0:
+
+            if (distance(self.x_physical, self.y_physical, self.obj_x_p, self.obj_y_p) < 1.25):
+                gc = gc * distance(self.x_physical, self.y_physical, self.obj_x_p, self.obj_y_p) / 1.25
+            if gc > 8:
+                print("here")
+                print(gc)
+            if np.cross(vec1, currentDir) > 0:  # clockwise
+                    gc = -gc
+            # self.gc = gc
+            self.gc = gc * gamma + (1-gamma) * self.gc
+        self.gc = np.clip(self.gc, -5, 5)
+
+
+
+
+
+
+
+
+
+def compute_intersection(a1, b1, a2, b2, a1_flag, a2_flag):
+    if a1_flag:
+        x = a1
+        y = a2 * x + b2
+    elif a2_flag:
+        x = a2
+        y = a1 * x + b1
+    else:
+        x = (b2 - b1) / (a1 - a2)
+        y = (a1 * b2 - a2 * b1) / (a1 - a2)
+    return np.array([x, y])
 
 
 def delta_angle_norm(x):
