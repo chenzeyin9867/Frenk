@@ -171,10 +171,10 @@ class PassiveHapticsEnv(object):
                 tangentPos_l_x.append(self.tangentPos[0])
                 tangentPos_l_y.append(self.tangentPos[1])
                 self.gc = self.gc1
-                if self.pathType == 'c':
-                    print("ind:", self.ind, "\tPathType:", self.pathType,
+                # if self.pathType == 'f':
+                print("ind:", self.ind, "\tPathType:", self.pathType,
                           "\ttangentPos:", self.tangentPos, "\tradius:", self.radius,
-                          "\tdeltaAngle:", abs(delta_angle_norm(self.p_direction - self.target_dir)),'gc:', self.gc)
+                         'gc:', self.gc)
                     # print(self.gt, self.gc)
                 # print(self.pathType)
                 # print(cnt, len(self.v_path))
@@ -312,7 +312,7 @@ class PassiveHapticsEnv(object):
         elif self.pathType == 'c':  # 90 degree circle and second part circle
             vec1 = self.targetPos + self.radius * self.targetOrthoDir - (self.currentPos + self.radius * self.currentOrthoDir)
             vec2 = self.currentOrthoDir
-            vec3 = self.targetPos - self.currentPos
+            vec3 = self.tangentPos - self.currentPos
             cosAngle1 = np.dot(vec1, vec2) / np.sqrt(vec1[1]*vec1[1] + vec1[0] * vec1[0])
             angle1 = np.arccos(cosAngle1)
             deltaAngle = abs(delta_angle_norm(self.p_direction - self.target_dir))
@@ -320,20 +320,34 @@ class PassiveHapticsEnv(object):
                 part1Angle = PI - angle1
             # part2Angle = abs(np.arctan(self.targetDir[1] / self.targetDir[0]))
             # part2Angle = PI / 2 - abs(delta_angle_norm(self.p_direction - self.target_dir))
-                print("special Format")
+                # print("special Format")
                 part2Angle = PI - deltaAngle - angle1
             else:
-                print("normal Format")
+                # print("normal Format")
                 part1Angle = PI + angle1
                 part2Angle = PI + angle1 - deltaAngle
             # print("angle", part2Angle * 180 /PI)
             # self.firstPartCnt = (PI / 2) * self.radius / VELOCITY
             return (part1Angle + part2Angle) * self.radius, (part1Angle) * self.radius
         elif self.pathType == 'f':
-            part2Angle = PI / 2 + abs(delta_angle_norm(self.p_direction - self.target_dir))
+            vec1 = self.targetPos + self.radius * self.targetOrthoDir - (self.currentPos + self.radius * self.currentOrthoDir)
+            vec2 = self.currentOrthoDir
+            vec3 = self.tangentPos - self.currentPos
+            cosAngle1 = np.dot(vec1, vec2) / np.sqrt(vec1[1]*vec1[1] + vec1[0] * vec1[0])
+            angle1 = np.arccos(cosAngle1)
+            deltaAngle = abs(delta_angle_norm(self.p_direction - self.target_dir))
+            if np.dot(self.currentDir, vec3) > 0: # normal type
+                part1Angle = PI - angle1
+                part2Angle = PI + deltaAngle - angle1
+                # print("normal", np.dot(vec1, vec2))
+            else:
+                # print("special")
+                part1Angle = PI + angle1
+                part2Angle = PI + angle1 + deltaAngle
+                # print("special", np.dot(vec1, vec2))
             # print("angle", part2Angle * 180 /PI)
             # self.firstPartCnt = (PI / 2) * self.radius / VELOCITY
-            return (PI / 2 + part2Angle) * self.radius, (PI / 2) * self.radius
+            return (part1Angle + part2Angle) * self.radius, (part1Angle) * self.radius
         # elif self.pathType == 'p':
         #     deltaAngle = abs(delta_angle_norm(self.p_direction - self.target_dir))
         #     self.firstPartCnt = deltaAngle * self.radius / VELOCITY
@@ -403,7 +417,7 @@ class PassiveHapticsEnv(object):
             if np.dot(self.targetDir, currentOrthoDir) < 0:
                 currentOrthoDir = - currentOrthoDir
             u1 = currentOrthoDir[0]
-            v1 = currentOrthoDir[1]
+            v1 = currentOrthoDir[1]                                                                        
             u2 = targetOrthoDir[0]
             v2 = targetOrthoDir[1]
 
@@ -435,6 +449,8 @@ class PassiveHapticsEnv(object):
             c = np.power(x2 - x1, 2) + np.power(y2 - y1, 2)
             r = solveEquation(a, b, c)
             self.radius = r
+            self.targetOrthoDir = targetOrthoDir
+            self.currentOrthoDir = currentOrthoDir
             self.tangentPos = (self.currentPos + r * currentOrthoDir + self.targetPos + targetOrthoDir * r) / 2
 
             # print("Special situation!****************" * 10)
