@@ -603,13 +603,14 @@ class PassiveHapticsEnv(object):
         plt.scatter(self.obj_x_p, self.obj_y_p, s=30, c='b')
         plt.show()
 
+    def getDistance(self):
+        return distance(self.x_physical, self.y_physical, self.obj_x_p, self.obj_y_p)
+
     '''
     when no intersect, using the s2c algorthm
     '''
     def calculate_s2c(self):
         gamma = 0.15
-        if self.ind == 3:
-            print('here')
         midPoint = np.array([(self.x_physical + self.obj_x_p)/2.0, (self.y_physical + self.obj_y_p)/2.0])
         vec1 = np.array([self.obj_x_p-self.x_physical, self.obj_y_p - self.y_physical])
         vec2 = np.array([-vec1[1], vec1[0]])
@@ -622,19 +623,18 @@ class PassiveHapticsEnv(object):
         """
         The situation that current direction passed the center
         """
-        if ((vec1[0] * currentDir[1] == vec1[1] * currentDir[0]) and np.dot(vec1,
-                                                                           currentDir) > 0) or distance(self.x_physical,self.y_physical, self.obj_x_p, self.obj_y_p) < 0.1: # the current dir pass the
+        if ((vec1[0] * currentDir[1] == vec1[1] * currentDir[0]) and np.dot(vec1, currentDir) > 0) or self.getDistance()<0.1: # the current dir pass the center
             gc = 0.0
             self.gc = gc * gamma + (1-gamma) * self.gc
         elif (distance(self.x_physical, self.y_physical, self.obj_x_p, self.obj_y_p) < 1.25) and (abs(np.arccos(
-                np.dot(-vec1, currentDir) / math.sqrt(vec1[0] * vec1[0] + vec1[1] * vec1[1]))) < PI / 9.0) and np.dot(
+                np.dot(-vec1, currentDir) / math.sqrt(vec1[0] * vec1[0] + vec1[1] * vec1[1]))) < PI / 4.0) and np.dot(
                 -vec1, currentDir) > 0:
-            radius = 10
+            radius = 4
             gc = 1.0 / radius
             if np.cross(-vec1, currentDir) > 0:
                 gc = -gc
-            # self.gc = gc
-            self.gc = gc * gamma + (1-gamma) * self.gc
+            self.gc = gc
+            # self.gc = gc * gamma + (1-gamma) * self.gc
         else:
             if np.dot(vec1, currentOrth) < 0:
                 currentOrth = -currentOrth
@@ -659,16 +659,19 @@ class PassiveHapticsEnv(object):
             #             vec1[0] * vec1[0] + vec1[1] * vec1[1]))) < PI / 4.0) and np.dot(
             #     vec1, currentDir) > 0:
 
-            if (distance(self.x_physical, self.y_physical, self.obj_x_p, self.obj_y_p) < 1.25):
-                gc = gc * distance(self.x_physical, self.y_physical, self.obj_x_p, self.obj_y_p) / 1.25
-            if gc > 8:
-                print("here")
-                print(gc)
+            # if (distance(self.x_physical, self.y_physical, self.obj_x_p, self.obj_y_p) < 1.25):
+            #     gc = gc * distance(self.x_physical, self.y_physical, self.obj_x_p, self.obj_y_p) / 1.25
+            # angle = abs(np.arccos(np.dot(vec1, currentDir)/math.sqrt(vec1[0]*vec1[0] + vec1[1] * vec1[1])))
+            # if np.dot(vec1, currentDir) > 0 and angle < PI / 4.0:
+            #     gc = gc * np.sin(PI/2 * angle/(PI/4))
+            # if gc > 8:
+            #     print("here")
+            #     print(gc)
             if np.cross(vec1, currentDir) > 0:  # clockwise
                     gc = -gc
             # self.gc = gc
             self.gc = gc * gamma + (1-gamma) * self.gc
-        self.gc = np.clip(self.gc, -5, 5)
+        # self.gc = np.clip(self.gc, -5, 5)
 
 
 
