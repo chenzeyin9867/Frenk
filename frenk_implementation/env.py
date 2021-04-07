@@ -151,7 +151,7 @@ class PassiveHapticsEnv(object):
             if not self.isIntersect():
                 # self.gc = 0.0
                 self.gt = 1.0
-                # self.calculate_s2c()
+                self.calculate_s2c()
                 if cnt == len(self.v_path) - 1:
                     signal = False
                     break
@@ -173,6 +173,7 @@ class PassiveHapticsEnv(object):
                 tangentPos_l_x.append(self.tangentPos[0])
                 tangentPos_l_y.append(self.tangentPos[1])
                 self.gc = self.gc1
+                print(self.gt)
                 # if self.pathType == 'f':
                 # print("ind:", self.ind, "\tPathType:", self.pathType,
                 #           "\ttangentPos:", self.tangentPos, "\tradius:", self.radius,
@@ -580,10 +581,10 @@ class PassiveHapticsEnv(object):
 
         # gc1 = np.clip(gc1, -0.13, 0.13)
         # gc2 = np.clip(gc2, -0.13, 0.13)
-        # gt = np.clip(gt, 0.2, 5.0)
-        # gc1 = np.clip(gc1, -3, 3)
-        # gc2 = np.clip(gc2, -3, 3)
-        # gt = np.clip(gt, 0.2, 5.0)
+        # gt = np.clip(gt, 0.8, 1.26)
+        gc1 = np.clip(gc1, -3, 3)
+        gc2 = np.clip(gc2, -3, 3)
+        gt = np.clip(gt, 0.2, 5.0)
         self.gt = gt
         self.gc1 = gc1
         self.gc2 = gc2
@@ -672,13 +673,6 @@ class PassiveHapticsEnv(object):
             # self.gc = gc
             self.gc = gc * gamma + (1-gamma) * self.gc
         # self.gc = np.clip(self.gc, -5, 5)
-
-
-
-
-
-
-
 
 
 def compute_intersection(a1, b1, a2, b2, a1_flag, a2_flag):
